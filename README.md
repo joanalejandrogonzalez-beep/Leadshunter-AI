@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/33684659/README.md)
 # LeadHunter AI
 
 Aplicación local (Python + Streamlit + SQLite) para encontrar, investigar y clasificar leads de **Novus Ops** y **NTO Productions**. Sin APIs de pago ni claves. Los dos negocios están completamente separados: se elige en la barra lateral y cada lista, dashboard y exportación solo muestra su negocio.

@@ -2,8 +2,23 @@
 o en una INFERENCIA (interpretación mía, marcada como tal). La capacidad económica es siempre una estimación."""
 from datetime import datetime
 
-NOVUS_SECTOR_FIT = {"Constructoras": 28, "Distribuidoras": 28, "Inmobiliarias": 25, "Propiedades vacacionales": 18}
-NTO_SECTOR_FIT = {"Inmobiliarias": 30, "Constructoras": 26, "Propiedades vacacionales": 30, "Distribuidoras": 4}
+# Ajustes de encaje sectorial por tipo de propuesta de valor comercial
+SOFTWARE_SECTOR_FIT = {"Constructoras": 28, "Distribuidoras": 28, "Inmobiliarias": 25, "Propiedades vacacionales": 18}
+MEDIA_SECTOR_FIT = {"Inmobiliarias": 30, "Constructoras": 26, "Propiedades vacacionales": 30, "Distribuidoras": 4}
+GENERAL_SECTOR_FIT = {"Constructoras": 25, "Inmobiliarias": 25, "Distribuidoras": 25, "Propiedades vacacionales": 25}
+
+# Mapeos históricos preservados para retrocompatibilidad
+NOVUS_SECTOR_FIT = SOFTWARE_SECTOR_FIT
+NTO_SECTOR_FIT = MEDIA_SECTOR_FIT
+
+
+def _get_business_category(business):
+    b = (business or "").lower()
+    if "nto" in b or any(k in b for k in ("video", "media", "audiovisual", "produccion", "producción")):
+        return "media"
+    if "novus" in b or any(k in b for k in ("software", "web", "tech", "ops", "sistemas", "dev")):
+        return "software"
+    return "general"
 
 
 def score_lead(business, lead, analysis):
@@ -12,10 +27,17 @@ def score_lead(business, lead, analysis):
     ev, inf = [], []  # evidencias verificadas / inferencias
     d = {"Encaje": 0, "Capacidad (est.)": 0, "Necesidad": 0, "Actividad": 0, "Calidad de datos": 0}
     sector = lead.get("sector", "")
+    cat = _get_business_category(business)
 
     # --- Encaje (30)
-    table = NOVUS_SECTOR_FIT if business == "Novus Ops" else NTO_SECTOR_FIT
-    d["Encaje"] = table.get(sector, 10)
+    if cat == "media" or business == "NTO Productions":
+        table = MEDIA_SECTOR_FIT
+    elif cat == "software" or business == "Novus Ops":
+        table = SOFTWARE_SECTOR_FIT
+    else:
+        table = GENERAL_SECTOR_FIT
+
+    d["Encaje"] = table.get(sector, 15)
     ev.append(f"Sector indicado en la búsqueda/fuente: {sector or 'sin definir'} (fuente: {lead.get('source') or 'n/d'}).")
 
     # --- Calidad de datos (10)
@@ -45,16 +67,16 @@ def score_lead(business, lead, analysis):
         inf.append("Inferencia: menciona varias sucursales/oficinas → estructura más grande.")
     if f.get("pages_read", 1) >= 3:
         cap += 2
-    if business == "NTO Productions" and s["luxury_mentions"] >= 2:
+    if (cat == "media" or business == "NTO Productions") and s["luxury_mentions"] >= 2:
         cap += 5
         ev.append("Observado: lenguaje de producto premium/lujo/frente al mar en la web.")
     if len([x for x in (lead.get("email") or f["emails"], lead.get("phone") or f["phones"], lead.get("instagram") or f["instagram"]) if x]) == 3:
         cap += 2
     d["Capacidad (est.)"] = min(cap, 20)
-    inf.append("La capacidad de invertir (p. ej. RD$50,000+) es una estimación indirecta; confírmala en la conversación.")
+    inf.append("La capacidad de inversión es una estimación indirecta basada en proxies de volumen; confírmala en la conversación.")
 
     # --- Necesidad (25)
-    if business == "Novus Ops":
+    if cat == "software" or business == "Novus Ops":
         if not f["https"]:
             need += 5; ev.append("Observado: la web no usa HTTPS.")
         if not s["has_viewport"]:
@@ -65,7 +87,7 @@ def score_lead(business, lead, analysis):
             need += 4; inf.append("Inferencia: sin portal/área de clientes → posible oportunidad de software o automatización.")
         if s["catalog_mentions"] >= 5 or s["project_mentions"] >= 5 or s["branch_mentions"] >= 2:
             need += 5; inf.append("Inferencia: operación con inventario/proyectos/sucursales → procesos candidatos a automatizar.")
-    else:
+    elif cat == "media" or business == "NTO Productions":
         if not s["has_video"]:
             need += 12; ev.append("Observado: no se detectó vídeo incrustado (YouTube/Vimeo/<video>) en las páginas leídas.")
         else:
@@ -74,6 +96,14 @@ def score_lead(business, lead, analysis):
             need += 8; ev.append("Observado: la web promociona propiedades/proyectos (material que se beneficia de vídeo).")
         if s["has_social_instagram"]:
             need += 5; ev.append("Observado: tiene Instagram enlazado (canal donde el vídeo rinde).")
+    else:
+        # Perfil comercial general / agencias / consultoría
+        if not f["https"] or not s["has_viewport"]:
+            need += 8; ev.append("Observado: oportunidad de optimización técnica y móvil en la presencia web.")
+        if not s["has_form"] and not s["has_quote_cta"]:
+            need += 8; ev.append("Observado: sin formulario de contacto directo o llamada a la acción clara.")
+        if not s["has_social_instagram"] and not s["has_whatsapp"]:
+            need += 6; inf.append("Inferencia: canales directos de captación limitados.")
     d["Necesidad"] = max(0, min(need, 25))
 
     # --- Actividad (15)
@@ -86,7 +116,7 @@ def score_lead(business, lead, analysis):
             act += 4; ev.append(f"Observado: copyright {yr} (actualización no reciente).")
         else:
             ev.append(f"Observado: copyright {yr} (web posiblemente abandonada).")
-            if business == "Novus Ops":
+            if cat == "software" or business == "Novus Ops":
                 d["Necesidad"] = min(25, d["Necesidad"] + 3)
     else:
         act += 3

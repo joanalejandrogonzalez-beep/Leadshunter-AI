@@ -1,18 +1,50 @@
-# Datos privados: leads, notas, contactos y logs NUNCA se suben
+# Datos privados: bases de datos, prospectos, notas, contactos y logs
 data/*
 !data/.gitkeep
 *.db
 *.sqlite*
+*.bak
 *.log
-# Secretos y entornos
+data/*.log
+
+# Secretos y variables de entorno
 .env
 .env.*
+!.env.example
 secrets.toml
 .streamlit/secrets.toml
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# Entornos virtuales
 .venv/
 venv/
+env/
+ENV/
+
+# Python bytecode y caches
 __pycache__/
 *.pyc
-# CSV con tus listas reales de prospectos (el ejemplo sí se publica)
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Archivos de hojas de cálculo y prospectos (solo se permite la plantilla de ejemplo)
 *.csv
+*.xlsx
+*.xls
 !sample_leads.csv
+
+# Sistema operativo e IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -13,29 +13,37 @@ UA = "LeadHunterAI/1.0 (+investigacion comercial manual)"
 HEAD = {"User-Agent": UA, "Accept-Language": "es,en;q=0.8"}
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?1[\s.-]?)?\(?(?:809|829|849)\)?[\s.-]?\d{3}[\s.-]?\d{4}")
+PHONE_INTL_RE = re.compile(r"(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{1,4}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{3,4}")
 BAD_EMAIL = ("sentry", "example.", "wixpress", "domain.com", "email.com", ".png", ".jpg", ".webp", ".svg", ".gif", "u003e")
 PAGE_HINTS = ("contact", "nosotros", "about", "servicio", "proyecto", "propiedad", "listing", "catalogo", "productos")
 INSTA_RE = re.compile(r"instagram\.com/([A-Za-z0-9._]{2,30})/?")
+LINKEDIN_RE = re.compile(r"https?://(?:www\.)?linkedin\.com/(?:company|in)/[A-Za-z0-9._%-]+/?", re.I)
 
 
 def _allowed(url):
     try:
         p = urlparse(url)
+        response = requests.get(
+            f"{p.scheme}://{p.netloc}/robots.txt",
+            headers=HEAD,
+            timeout=4,
+        )
+        if response.status_code >= 400:
+            return True
         rp = robotparser.RobotFileParser()
-        rp.set_url(f"{p.scheme}://{p.netloc}/robots.txt")
-        rp.read()
+        rp.parse(response.text.splitlines())
         return rp.can_fetch(UA, url)
     except Exception:
-        return True  # sin robots.txt accesible: se permite una lectura ligera
+        return True
 
 
 def _get(url):
-    r = requests.get(url, headers=HEAD, timeout=15, allow_redirects=True)
+    r = requests.get(url, headers=HEAD, timeout=10, allow_redirects=True)
     r.raise_for_status()
     return r
 
 
-def analyze_site(website, max_pages=4):
+def analyze_site(website, max_pages=3):
     """Devuelve dict con 'ok', 'facts' (observado), 'signals' y 'error'."""
     if not website:
         return {"ok": False, "error": "Sin web", "facts": {}, "signals": {}}
@@ -80,9 +88,11 @@ def analyze_html(pages, final_url="", https=True):
         for a in s.select('a[href^="tel:"]'):
             phones.append(re.sub(r"[^\d+]", "", a["href"][4:]))
     phones += [re.sub(r"\D", "", m) for m in PHONE_RE.findall(text)]
-    phones = list(dict.fromkeys(p for p in phones if len(p) >= 10))
+    phones += [re.sub(r"\D", "", m) for m in PHONE_INTL_RE.findall(text) if len(re.sub(r"\D", "", m)) >= 8]
+    phones = list(dict.fromkeys(p for p in phones if 8 <= len(p) <= 15))
     instas = [h for h in INSTA_RE.findall(all_html) if h.lower() not in ("p", "reel", "explore", "accounts", "sharer")]
     insta = f"https://instagram.com/{instas[0]}" if instas else ""
+    linkedin = list(dict.fromkeys(LINKEDIN_RE.findall(all_html)))[:3]
 
     years = [int(y) for y in re.findall(r"(?:©|copyright|&copy;)[^0-9]{0,30}((?:19|20)\d\d)", lower_html)]
     generator = ""
@@ -96,7 +106,7 @@ def analyze_html(pages, final_url="", https=True):
 
     kw = lambda *w: sum(text.count(x) for x in w)
     facts = {
-        "emails": emails[:3], "phones": phones[:3], "instagram": insta,
+        "emails": emails[:3], "phones": phones[:3], "instagram": insta, "linkedin": linkedin,
         "https": https, "cms": cms or generator, "pages_read": len(pages),
         "last_copyright_year": max(years) if years else None,
     }

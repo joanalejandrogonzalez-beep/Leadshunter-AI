@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3DPT-Libra LPBF Metrology Simulation</title>
+    <style>
+        :root {
+            --bg-dark: #080b10;
+            --bg-card: #0f141c;
+            --bg-canvas: #05070a;
+            --accent-cyan: #38bdf8;
+            --accent-purple: #a855f7;
+            --accent-purple-glow: #c084fc;
+            --accent-red: #dc2626;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #1e293b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .simulation-container {
+            width: 100%;
+            max-width: 900px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .sim-header {
+            padding: 1rem 1.5rem;
+            background: rgba(15, 20, 28, 0.9);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .sim-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-main);
+            text-align: center;
+        }
+
+        .sim-canvas-wrapper {
+            position: relative;
+            width: 100%;
+            height: 420px;
+            background-color: var(--bg-canvas);
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .overlay-card {
+            width: fit-content;
+            max-width: 100%;
+            background: rgba(15, 20, 28, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: clamp(0.45rem, 2vw, 0.65rem) clamp(0.6rem, 3vw, 1rem);
+            border-radius: 8px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: clamp(0.6rem, 2.5vw, 0.75rem);
+            backdrop-filter: blur(8px);
+            color: #f1f5f9;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            overflow-wrap: anywhere;
+        }
+
+        .overlay-card span {
+            color: var(--accent-cyan);
+            font-weight: bold;
+        }
+
+        .control-panel {
+            padding: 1.25rem 1.5rem;
+            background: var(--bg-card);
+            border-top: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1.25rem;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .control-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .control-group label span {
+            color: var(--accent-cyan);
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            text-transform: none;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 5px;
+            background: #1e293b;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-sim {
+            background: #1e293b;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex: 1;
+            height: 100%;
+        }
+
+        .btn-sim:hover {
+            background: #283548;
+            border-color: var(--accent-cyan);
+        }
+
+        .btn-sim.primary {
+            background: var(--accent-red);
+            border-color: var(--accent-red);
+        }
+
+        .btn-sim.primary:hover {
+            background: #b91c1c;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="simulation-container">
+        <div class="sim-header">
+            <div class="sim-title">3DPT-Libra Spreadability Metrology</div>
+            <div class="overlay-card" id="overlayData">
+                STATE: <span id="overlayState" style="color: var(--accent-purple);">OPTICAL &amp; DENSITY ANALYSIS</span><br>
+                LAYER: <span id="overlayLayer">40 μm</span><br>
+                SPEED: <span id="overlaySpeed">120 mm/s</span><br>
+                POWDER: <span id="overlaySize">35 μm</span>
+            </div>
+        </div>
+
+        <div class="sim-canvas-wrapper">
+            <canvas id="simCanvas" width="898" height="420"></canvas>
+        </div>
+
+        <div class="control-panel">
+            <div class="control-group">
+                <label>Recoater Speed <span id="valSpeed">120 mm/s</span></label>
+                <input type="range" id="rangeSpeed" min="40" max="300" step="10" value="120">
+            </div>
+
+            <div class="control-group">
+                <label>Layer Thickness <span id="valLayer">40 μm</span></label>
+                <input type="range" id="rangeLayer" min="20" max="60" step="5" value="40">
+            </div>
+
+            <div class="control-group">
+                <label>Powder Size <span id="valSize">35 μm</span></label>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-sim primary" id="btnRestart">Run Cycle</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            const bounds = canvas.parentElement.getBoundingClientRect();
+            const width = Math.floor(bounds.width);
+            const height = Math.floor(bounds.height);
+            if (width < 1 || height < 1) return false;
+
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+            return true;
+        }
+        let canvasReady = resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        if ('ResizeObserver' in window) {
+            new ResizeObserver(() => {
+                canvasReady = resizeCanvas() || canvasReady;
+            }).observe(canvas.parentElement);
+        }
+
+        // Simulation parameters & state
+        let simState = 'POWDER_DROP'; // POWDER_DROP, SPREADING, MELTING, RESTARTING
+        let particles = [];
+        let meltProgress = 0;
+        let dropTimer = 0;
+        let settledFrames = 0;
+        let restartAt = 0;
+        
+        let roller = {
+            x: 0,
+            y: 0,
+            radius: 32,
+            speed: 2,
+            active: false
+        };
+
+        const config = {
+            recoaterSpeed: 120,
+            layerThickness: 40,
+            powderSize: 35
+        };
+
+        // DOM Controls
+        const rangeSpeed = document.getElementById('rangeSpeed');
+        const rangeLayer = document.getElementById('rangeLayer');
+        const btnRestart = document.getElementById('btnRestart');
+
+        const valSpeed = document.getElementById('valSpeed');
+        const valLayer = document.getElementById('valLayer');
+        const valSize = document.getElementById('valSize');
+
+        const overlayLayer = document.getElementById('overlayLayer');
+        const overlaySpeed = document.getElementById('overlaySpeed');
+        const overlaySize = document.getElementById('overlaySize');
+        const overlayState = document.getElementById('overlayState');
+
+        function updateUI() {
+            config.recoaterSpeed = parseInt(rangeSpeed.value);
+            config.layerThickness = parseInt(rangeLayer.value);
+
+            valSpeed.textContent = config.recoaterSpeed + ' mm/s';
+            overlaySpeed.textContent = config.recoaterSpeed + ' mm/s';
+            
+            valLayer.textContent = config.layerThickness + ' μm';
+            overlayLayer.textContent = config.layerThickness + ' μm';
+            valSize.textContent = config.powderSize + ' μm';
+            overlaySize.textContent = config.powderSize + ' μm';
+        }
+
+        rangeSpeed.addEventListener('input', updateUI);
+        rangeLayer.addEventListener('input', () => {
+            updateUI();
+            initSimulation();
+        });
+
+        class Particle {
+            constructor(x, y, radius) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.vx = 0;
+                this.vy = 0;
+                this.color = Math.random() > 0.2 ? '#38bdf8' : '#64748b';
+                this.isMelted = false;
+            }
+
+            update(groundY, bedBuildY, gapWidth, gapStartX) {
+                if (simState === 'RESTARTING') return;
+
+                // Congelar la partícula exactamente en su sitio al derretirse
+                if (this.isMelted) {
+                    this.vx = 0;
+                    this.vy = 0;
+                    return;
+                }
+
+                this.vy += 0.35; // Gravedad
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.82; // Fricción
+                this.vy *= 0.90;
+
+                // Restricción Fase 1: El polvo inicial permanece fuera de la cavidad
+                if (simState === 'POWDER_DROP') {
+                    if (this.x + this.radius > gapStartX) {
+                        this.x = gapStartX - this.radius;
+                        this.vx = 0;
+                    }
+                }
+
+                // Colisiones con las paredes de la cavidad
+                if (this.y > groundY) {
+                    if (this.x - this.radius < gapStartX) {
+                        this.x = gapStartX + this.radius;
+                        this.vx *= -0.3;
+                    }
+                    if (this.x + this.radius > gapStartX + gapWidth) {
+                        this.x = gapStartX + gapWidth - this.radius;
+                        this.vx *= -0.3;
+                    }
+                }
+                
+                // Colisión con el suelo (plataformas o fondo de la cavidad)
+                let currentGround = groundY;
+                if (this.x > gapStartX && this.x < gapStartX + gapWidth) {
+                    currentGround = bedBuildY;
+                }
+                
+                if (this.y + this.radius > currentGround) {
+                    this.y = currentGround - this.radius;
+                    this.vy = -this.vy * 0.15;
+                    this.vx *= 0.7; // Fricción contra el suelo
+                }
+
+                // LÓGICA DE RODILLO SÓLIDO (Cuchilla impermeable / No flota)
+                if (simState === 'SPREADING' && roller.active) {
+                    const rollerFront = roller.x + roller.radius;
+                    
+                    // Si la partícula está frente al rodillo y por encima del suelo
+                    if (this.x - this.radius < rollerFront && this.x > roller.x - roller.radius) {
+                        if (this.y < groundY + this.radius) {
+                            this.x = rollerFront + this.radius;
+                            this.vx = roller.speed + (Math.random() * 0.3);
+                        }
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.isMelted ? '#a855f7' : this.color;
+                ctx.fill();
+            }
+        }
+
+        function initSimulation() {
+            particles = [];
+            simState = 'POWDER_DROP';
+            dropTimer = 0;
+            settledFrames = 0;
+            meltProgress = 0;
+            overlayState.innerHTML = 'POWDER FEEDING';
+            overlayState.style.color = 'var(--accent-cyan)';
+            
+            // Factor de escala físico-gráfico consistente (0.5 px por μm):
+            // - Cavidad (40 μm) = 20 px
+            // - Polvo (35 μm) = 17.5 px de diámetro (8.75 px de radio)
+            // - Diferencia = 20 px - 17.5 px = 2.5 px (exactamente 5 μm menor que la distancia)
+            const scale = 0.5;
+            const pDiameter = config.powderSize * scale;
+            const pRadius = pDiameter / 2;
+            
+            const groundY = canvas.height - 70;
+            const gapWidth = canvas.width * 0.55;
+            const gapStartX = canvas.width * 0.25;
+            const bedBuildY = groundY + (config.layerThickness * scale);
+
+            // ECUACIÓN DEL DOCUMENTO (Página 2):
+            // Q(v) : V / Ps
+            // Q(v) : quantity of powders per simulation
+            // V: Volume required (2x Vs)
+            // Ps : Powder Size
+            // Vs: Volume Powder bed cavity
+            const cavityWidthUm = gapWidth / scale;
+            const Vs = cavityWidthUm;
+            const V = 2 * Vs;
+            const Ps = config.powderSize;
+            const Q_v = Math.floor(V / Ps);
+            const totalParticles = Q_v;
+
+            // Depósito del polvo en la plataforma izquierda fuera de la cavidad (Página 1)
+            const safePlatformWidth = gapStartX * 0.65;
+            const columns = Math.max(1, Math.floor(safePlatformWidth / (pRadius * 2.1)));
+            const startX = 25;
+            
+            for (let i = 0; i < totalParticles; i++) {
+                const col = i % columns;
+                const row = Math.floor(i / columns);
+                const rx = startX + col * (pRadius * 2.1) + (row % 2 === 0 ? pRadius * 0.5 : 0);
+                const ry = groundY - pRadius - row * (pRadius * 1.8);
+                particles.push(new Particle(rx, ry, pRadius));
+            }
+
+            roller.x = -60;
+            roller.y = groundY - roller.radius;
+            roller.active = false;
+        }
+
+        function resolveParticleCollisions() {
+            // Sweep and Prune optimizado
+            particles.sort((a, b) => a.x - b.x);
+            
+            for (let i = 0; i < particles.length; i++) {
+                const p1 = particles[i];
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p2 = particles[j];
+                    
+                    const dx = p2.x - p1.x;
+                    if (dx > p1.radius + p2.radius) break; 
+                    const dy = p2.y - p1.y;
+                    if (Math.abs(dy) > p1.radius + p2.radius) continue;
+
+                    const distSq = dx * dx + dy * dy;
+                    const minDist = p1.radius + p2.radius;
+
+                    if (distSq < minDist * minDist && distSq > 0.0001) {
+                        if (p1.isMelted || p2.isMelted) continue;
+
+                        const dist = Math.sqrt(distSq);
+                        const overlap = (minDist - dist) * 0.5;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+
+                        p1.x -= nx * overlap;
+                        p1.y -= ny * overlap;
+                        p2.x += nx * overlap;
+                        p2.y += ny * overlap;
+                    }
+                }
+            }
+        }
+
+        function animate(timestamp) {
+            if (!canvasReady) {
+                canvasReady = resizeCanvas();
+                requestAnimationFrame(animate);
+                return;
+            }
+
+            if (particles.length === 0) initSimulation();
+
+            if (simState === 'RESTARTING' && timestamp >= restartAt) {
+                initSimulation();
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const scale = 0.5;
+            const groundY = canvas.height - 70;
+            const gapWidth = canvas.width * 0.55;
+            const gapStartX = canvas.width * 0.25;
+            const bedBuildY = groundY + (config.layerThickness * scale);
+
+            // Dibujar Plataformas Substrato
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 2;
+
+            ctx.fillRect(0, groundY, gapStartX, 70);
+            ctx.strokeRect(0, groundY, gapStartX, 70);
+            
+            ctx.fillStyle = '#030712'; // Fondo de la cavidad
+            ctx.fillRect(gapStartX, bedBuildY, gapWidth, 70 + (groundY - bedBuildY));
+            ctx.strokeRect(gapStartX, bedBuildY, gapWidth, 70 + (groundY - bedBuildY));
+            
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(gapStartX + gapWidth, groundY, canvas.width - (gapStartX + gapWidth), 70);
+            ctx.strokeRect(gapStartX + gapWidth, canvas.height - 70, canvas.width - (gapStartX + gapWidth), 70);
+
+            // Actualizar partículas
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update(groundY, bedBuildY, gapWidth, gapStartX);
+            }
+            resolveParticleCollisions();
+
+            // FASE 0: CAÍDA INICIAL DEL POLVO (POWDER DROP)
+            if (simState === 'POWDER_DROP') {
+                dropTimer++;
+                
+                // Dibujar Rodillo estático a la izquierda
+                ctx.beginPath();
+                ctx.arc(roller.x, roller.y, roller.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#1e293b';
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2.5;
+                ctx.fill();
+                ctx.stroke();
+
+                // Esperar a que el polvo se asiente completamente en la plataforma
+                const allSettled = particles.every(p => Math.abs(p.vy) < 0.25 && Math.abs(p.vx) < 0.25);
+                if (dropTimer > 40 && allSettled) {
+                    settledFrames++;
+                } else if (dropTimer > 70) {
+                    settledFrames = 30;
+                } else {
+                    settledFrames = 0;
+                }
+
+                if (settledFrames >= 30) {
+                    simState = 'SPREADING';
+                    roller.active = true;
+                    overlayState.innerHTML = 'SPREADING';
+                }
+            }
+            // FASE 1: ESPARCIMIENTO (SPREADING)
+            else if (simState === 'SPREADING' && roller.active) {
+                // Mover rodillo
+                roller.speed = (config.recoaterSpeed / 60) + 0.8;
+                roller.x += roller.speed;
+
+                // Dibujar Rodillo
+                ctx.beginPath();
+                ctx.arc(roller.x, roller.y, roller.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#1e293b';
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2.5;
+                ctx.fill();
+                ctx.stroke();
+
+                // Termina cuando cruza por completo la pantalla a la derecha
+                if (roller.x - roller.radius > canvas.width + 50) {
+                    simState = 'MELTING';
+                    roller.active = false;
+                    overlayState.innerHTML = 'OPTICAL & DENSITY ANALYSIS';
+                    overlayState.style.color = 'var(--accent-purple)';
+                }
+            } 
+            
+            // Dibujar todas las partículas
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].draw(ctx);
+            }
+
+            // Línea roja indicadora ESTRICTA de la cavidad
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = '#dc2626';
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.moveTo(gapStartX, groundY);
+            ctx.lineTo(gapStartX + gapWidth, groundY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // FASE 2: ANÁLISIS ÓPTICO Y DERRETIMIENTO
+            if (simState === 'MELTING') {
+                meltProgress += 0.01; 
+                
+                // Opacidad reducida para mayor transparencia en la luz
+                const flickerAlpha = 0.15 + Math.random() * 0.15;
+                const centerX = gapStartX + (gapWidth / 2);
+
+                // Convertir EXCLUSIVAMENTE partículas dentro de la línea roja manteniendo su tamaño exacto
+                for (let i = 0; i < particles.length; i++) {
+                    let p = particles[i];
+                    if (p.x >= gapStartX && p.x <= gapStartX + gapWidth) {
+                        p.isMelted = true;
+                        p.vx = 0;
+                        p.vy = 0;
+                    }
+                }
+
+                // Lente Triangular Transparente (Efecto de luz tenue y translúcida)
+                let lensGradient = ctx.createLinearGradient(0, 0, 0, groundY);
+                lensGradient.addColorStop(0, `rgba(168, 85, 247, ${flickerAlpha * 0.4})`);
+                lensGradient.addColorStop(1, `rgba(192, 132, 252, ${flickerAlpha * 0.8})`);
+                
+                ctx.fillStyle = lensGradient;
+                ctx.beginPath();
+                ctx.moveTo(centerX, 0); 
+                ctx.lineTo(gapStartX, groundY); // Esquina Izquierda EXACTA
+                ctx.lineTo(gapStartX + gapWidth, groundY); // Esquina Derecha EXACTA
+                ctx.fill();
+
+                // Brillo Morado Sutil en el área delimitada
+                let bedGlow = ctx.createLinearGradient(0, groundY, 0, bedBuildY);
+                bedGlow.addColorStop(0, `rgba(192, 132, 252, ${flickerAlpha * 0.35})`);
+                bedGlow.addColorStop(1, 'rgba(168, 85, 247, 0)');
+                ctx.fillStyle = bedGlow;
+                ctx.fillRect(gapStartX, groundY, gapWidth, bedBuildY - groundY);
+
+                // TEXTO 1: OPTICAL ANALYSIS (Encima del triángulo de luz, en color gris)
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 16px ui-monospace, monospace';
+                ctx.fillStyle = '#cbd5e1'; // Color gris
+                ctx.globalAlpha = 0.85;
+                ctx.fillText('OPTICAL ANALYSIS', centerX, 35);
+
+                // TEXTO 2: DENSITY ANALYSIS (Abajo de las partículas, en la cavidad inferior)
+                ctx.fillStyle = '#d8b4fe';
+                ctx.font = 'bold 15px ui-monospace, monospace';
+                ctx.fillText('DENSITY ANALYSIS', centerX, bedBuildY + 35);
+                
+                ctx.globalAlpha = 1.0;
+                ctx.textAlign = 'left'; 
+
+                if (meltProgress >= 1.5) { 
+                    simState = 'RESTARTING';
+                    overlayState.textContent = 'CYCLE COMPLETE';
+                    overlayState.style.color = 'var(--text-muted)';
+                    restartAt = timestamp + 2500;
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        btnRestart.addEventListener('click', () => {
+            initSimulation();
+        });
+
+        // Initialize UI & Start the animation loop
+        updateUI();
+        if (canvasReady) initSimulation();
+        requestAnimationFrame(animate);
+    </script>
+
+</body>
+</html>
